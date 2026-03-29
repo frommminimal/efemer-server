@@ -1,12 +1,12 @@
-from flask import Flask, request, jsonify, send_from_directory
+import os
 import sqlite3
 import requests
-import os
+from flask import Flask, request, jsonify, send_from_directory
 
 app = Flask(__name__, static_folder='static')
-
 DATABASE = 'database.db'
 
+# --- Инициализация базы данных ---
 def init_db():
     conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
@@ -37,6 +37,7 @@ def init_db():
     conn.commit()
     conn.close()
 
+# --- Вспомогательные функции ---
 def get_or_create_user(username):
     conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
@@ -73,7 +74,7 @@ def save_message(user_id, role, content):
     conn.commit()
     conn.close()
 
-def get_notes(user_id, limit=10):
+def get_notes(user_id, limit=5):
     conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
     c.execute('''
@@ -85,6 +86,7 @@ def get_notes(user_id, limit=10):
     conn.close()
     return [r[0] for r in rows]
 
+# --- API ---
 @app.route('/api/chat', methods=['POST'])
 def chat():
     data = request.json
@@ -99,8 +101,8 @@ def chat():
 
     save_message(user_id, 'user', user_message)
 
-    history = get_history(user_id, limit=50)
-    notes = get_notes(user_id, limit=5)
+    history = get_history(user_id)
+    notes = get_notes(user_id)
 
     system_prompt = user['persona']
     if notes:
@@ -111,11 +113,15 @@ def chat():
         messages.append({"role": msg['role'], "content": msg['content']})
     messages.append({"role": "user", "content": user_message})
 
+    api_key = os.environ.get('DEEPSEEK_API_KEY')
+    if not api_key:
+        return jsonify({'error': 'API key not configured'}), 500
+
     try:
         response = requests.post(
             "https://api.deepseek.com/v1/chat/completions",
             headers={
-                "Authorization": "Bearer YOUR_DEEPSEEK_API_KEY",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json"
             },
             json={
@@ -126,7 +132,7 @@ def chat():
             }
         )
         if response.status_code != 200:
-            return jsonify({'error': 'DeepSeek API error'}), 500
+            return jsonify({'error': 'DeepSeek API error', 'details': response.text}), 500
 
         data = response.json()
         assistant_response = data['choices'][0]['message']['content']
@@ -141,8 +147,7 @@ def chat():
 def index():
     return send_from_directory('static', 'index.html')
 
-# Инициализация
-init_db()
+# --- Запуск ---
 if __name__ == '__main__':
     init_db()
     app.run(host='0.0.0.0', port=5000)
