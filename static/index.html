@@ -2,45 +2,59 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>Эфемер</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
         body {
-            font-family: system-ui, sans-serif;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
             background: #0f0f1a;
-            color: white;
+            color: #f0f0f0;
             margin: 0;
             padding: 20px;
         }
         .container {
-            max-width: 700px;
+            max-width: 800px;
             margin: 0 auto;
             background: #1e1e2f;
             border-radius: 32px;
             padding: 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+        }
+        h2 {
+            margin-top: 0;
+            text-align: center;
         }
         .history {
             background: #0f0f1a;
             border-radius: 24px;
             padding: 16px;
-            max-height: 500px;
+            max-height: 55vh;
             overflow-y: auto;
             margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
         }
         .message {
             margin-bottom: 16px;
             padding: 10px 14px;
             border-radius: 20px;
             max-width: 85%;
+            word-wrap: break-word;
         }
         .user {
             background: #4f46e5;
-            margin-left: auto;
+            align-self: flex-end;
             text-align: right;
+            border-bottom-right-radius: 4px;
         }
         .assistant {
             background: #2a2a3c;
+            align-self: flex-start;
             text-align: left;
+            border-bottom-left-radius: 4px;
         }
         .label {
             font-size: 0.7rem;
@@ -50,15 +64,17 @@
         .input-area {
             display: flex;
             gap: 10px;
+            margin-top: 8px;
         }
         input {
             flex: 1;
-            padding: 12px;
+            padding: 14px 18px;
             border-radius: 40px;
             border: none;
             background: #2a2a3c;
             color: white;
             font-size: 1rem;
+            outline: none;
         }
         button {
             background: #4f46e5;
@@ -67,12 +83,21 @@
             padding: 12px 24px;
             border-radius: 40px;
             cursor: pointer;
+            font-weight: bold;
+            font-size: 1rem;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #6366f1;
         }
         .status {
             font-size: 0.8rem;
-            margin-top: 10px;
+            margin-top: 12px;
             text-align: center;
             opacity: 0.7;
+        }
+        .error {
+            color: #ff8888;
         }
     </style>
 </head>
@@ -80,7 +105,7 @@
 <div class="container">
     <h2>🧬 Эфемер</h2>
     <div class="history" id="history">
-        <div class="assistant message">💬 Здесь появится история разговора...</div>
+        <div class="assistant message">💬 Напиши что-нибудь, я помню наши разговоры.</div>
     </div>
     <div class="input-area">
         <input type="text" id="messageInput" placeholder="Спроси меня о чём угодно..." autofocus>
@@ -90,62 +115,72 @@
 </div>
 
 <script>
-    const API_URL = window.location.origin + '/api/chat';
-    const USERNAME = 'Ro';
+    (function() {
+        const API_URL = window.location.origin + '/api/chat';
+        const USERNAME = 'Ro';
 
-    const sendBtn = document.getElementById('sendBtn');
-    const messageInput = document.getElementById('messageInput');
-    const historyDiv = document.getElementById('history');
-    const statusDiv = document.getElementById('status');
+        const sendBtn = document.getElementById('sendBtn');
+        const messageInput = document.getElementById('messageInput');
+        const historyDiv = document.getElementById('history');
+        const statusDiv = document.getElementById('status');
 
-    function addMessage(text, isUser) {
-        const msgDiv = document.createElement('div');
-        msgDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
-        const label = document.createElement('div');
-        label.className = 'label';
-        label.innerText = isUser ? 'Вы' : 'Эфемер';
-        const textDiv = document.createElement('div');
-        textDiv.innerText = text;
-        msgDiv.appendChild(label);
-        msgDiv.appendChild(textDiv);
-        historyDiv.appendChild(msgDiv);
-        historyDiv.scrollTop = historyDiv.scrollHeight;
-    }
-
-    function setStatus(text, isError = false) {
-        statusDiv.innerHTML = text;
-        statusDiv.style.color = isError ? '#ff8888' : '#b9b9e6';
-    }
-
-    async function sendMessage() {
-        const message = messageInput.value.trim();
-        if (!message) return;
-
-        messageInput.value = '';
-        addMessage(message, true);
-        setStatus('🧠 Эфемер думает...');
-
-        try {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: USERNAME, message: message })
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            const data = await response.json();
-            addMessage(data.response, false);
-            setStatus('⚡ Готов');
-        } catch (err) {
-            console.error(err);
-            setStatus(`❌ Ошибка: ${err.message}`, true);
-            addMessage('Извини, сейчас не могу ответить. Попробуй позже.', false);
+        function addMessage(text, isUser) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
+            const label = document.createElement('div');
+            label.className = 'label';
+            label.innerText = isUser ? 'Вы' : 'Эфемер';
+            const textDiv = document.createElement('div');
+            textDiv.innerText = text;
+            msgDiv.appendChild(label);
+            msgDiv.appendChild(textDiv);
+            historyDiv.appendChild(msgDiv);
+            msgDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
-    }
 
-    sendBtn.onclick = sendMessage;
-    messageInput.onkeypress = (e) => {
-        if (e.key === 'Enter') sendMessage();
-    };
+        function setStatus(text, isError = false) {
+            statusDiv.innerHTML = text;
+            if (isError) {
+                statusDiv.classList.add('error');
+            } else {
+                statusDiv.classList.remove('error');
+            }
+        }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            messageInput.value = '';
+            addMessage(message, true);
+            setStatus('🧠 Эфемер думает...');
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: USERNAME, message: message })
+                });
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                const data = await response.json();
+                addMessage(data.response, false);
+                setStatus('⚡ Готов');
+            } catch (err) {
+                console.error(err);
+                setStatus(`❌ Ошибка: ${err.message}`, true);
+                addMessage('Извини, сейчас не могу ответить. Попробуй позже.', false);
+            }
+        }
+
+        sendBtn.onclick = sendMessage;
+        messageInput.onkeypress = (e) => {
+            if (e.key === 'Enter') sendMessage();
+        };
+        messageInput.focus();
+    })();
 </script>
 </body>
 </html>
