@@ -41,20 +41,24 @@ def init_db():
     print("✅ База данных готова")
 
 def get_or_create_user(username):
+    print(f"👤 Поиск/создание пользователя: {username}")
     conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
     c.execute('SELECT * FROM users WHERE username = ?', (username,))
     user = c.fetchone()
     if not user:
+        print(f"📝 Создаём нового пользователя: {username}")
         c.execute('INSERT INTO users (username) VALUES (?)', (username,))
         conn.commit()
         user_id = c.lastrowid
         conn.close()
         return {'id': user_id, 'username': username, 'persona': 'Ты — дружелюбный собеседник. Отвечай кратко, тепло, по-русски.'}
+    print(f"✅ Найден пользователь: {username} (id={user[0]})")
     conn.close()
     return {'id': user[0], 'username': user[1], 'persona': user[2]}
 
 def get_history(user_id, limit=50):
+    print(f"📜 Загрузка истории для user_id={user_id}, limit={limit}")
     conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
     c.execute('''
@@ -64,9 +68,12 @@ def get_history(user_id, limit=50):
     ''', (user_id, limit))
     rows = c.fetchall()
     conn.close()
-    return [{'role': r[0], 'content': r[1]} for r in reversed(rows)]
+    history = [{'role': r[0], 'content': r[1]} for r in reversed(rows)]
+    print(f"📜 Загружено {len(history)} сообщений")
+    return history
 
 def save_message(user_id, role, content):
+    print(f"💾 Сохранение сообщения: user_id={user_id}, role={role}, content_len={len(content)}")
     conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
     c.execute('''
@@ -75,6 +82,7 @@ def save_message(user_id, role, content):
     ''', (user_id, role, content))
     conn.commit()
     conn.close()
+    print("✅ Сообщение сохранено")
 
 def get_notes(user_id, limit=5):
     conn = sqlite3.connect(DATABASE)
@@ -86,50 +94,65 @@ def get_notes(user_id, limit=5):
     ''', (user_id, limit))
     rows = c.fetchall()
     conn.close()
-    return [r[0] for r in rows]
+    notes = [r[0] for r in rows]
+    if notes:
+        print(f"📝 Загружено {len(notes)} заметок")
+    return notes
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
     start_time = time.time()
+    print("\n" + "="*50)
+    print("🔵 ПОЛУЧЕН НОВЫЙ ЗАПРОС")
+    
     data = request.json
     username = data.get('username', 'anonymous')
     user_message = data.get('message', '')
+    print(f"👤 Username: {username}")
+    print(f"💬 Сообщение: {user_message[:100]}..." if len(user_message) > 100 else f"💬 Сообщение: {user_message}")
 
     if not user_message:
+        print("⚠️ Пустое сообщение")
         return jsonify({'error': 'Пустое сообщение'}), 400
 
     try:
-        # Получаем пользователя
+        # 1. Работа с пользователем
         user = get_or_create_user(username)
         user_id = user['id']
-        
-        # Сохраняем сообщение пользователя
+
+        # 2. Сохраняем сообщение пользователя
         save_message(user_id, 'user', user_message)
 
-        # Загружаем историю и заметки
+        # 3. Загружаем историю и заметки
         history = get_history(user_id)
         notes = get_notes(user_id)
 
-        # Формируем системный промпт
+        # 4. Формируем промпт
         system_prompt = user['persona']
         if notes:
             system_prompt += "\n\nТвои заметки о собеседнике:\n- " + "\n- ".join(notes)
-
+        
         # СОБИРАЕМ СПИСОК СООБЩЕНИЙ ДЛЯ API
         messages = [{"role": "system", "content": system_prompt}]
         for msg in history:
             messages.append({"role": msg['role'], "content": msg['content']})
         messages.append({"role": "user", "content": user_message})
+        
+        print(f"📦 Подготовлено {len(messages)} сообщений для API")
 
-        # Получаем API-ключ из переменных окружения
+        # 5. Проверяем API ключ
         api_key = os.environ.get('SILICONFLOW_API_KEY')
         if not api_key:
-            return jsonify({'error': 'SILICONFLOW_API_KEY not configured'}), 500
+            print("❌ SILICONFLOW_API_KEY не найден в переменных окружения!")
+            return jsonify({'error': 'API key not configured'}), 500
+        print(f"🔑 API ключ найден: {api_key[:10]}...")
 
-        # Выбираем бесплатную модель
+        # 6. Выбираем модель
         MODEL_NAME = "Qwen/Qwen3.5-4B"
+        print(f"🤖 Используем модель: {MODEL_NAME}")
 
-        # Запрос к SiliconFlow
+        # 7. Запрос к SiliconFlow
+        print("🔄 Отправка запроса к SiliconFlow API...")
         response = requests.post(
             "https://api.siliconflow.cn/v1/chat/completions",
             headers={
@@ -144,24 +167,34 @@ def chat():
             },
             timeout=30
         )
-
+        
+        print(f"📥 Статус ответа SiliconFlow: {response.status_code}")
+        
         if response.status_code != 200:
+            print(f"❌ Ошибка SiliconFlow API: {response.text[:500]}")
             return jsonify({'error': 'SiliconFlow API error', 'details': response.text}), 500
 
+        # 8. Обрабатываем ответ
         data = response.json()
         assistant_response = data['choices'][0]['message']['content']
-        
-        # Сохраняем ответ
-        save_message(user_id, 'assistant', assistant_response)
+        print(f"✅ Получен ответ от SiliconFlow, длина: {len(assistant_response)} символов")
+        print(f"📝 Ответ: {assistant_response[:200]}..." if len(assistant_response) > 200 else f"📝 Ответ: {assistant_response}")
 
+        # 9. Сохраняем ответ
+        save_message(user_id, 'assistant', assistant_response)
+        
         elapsed = time.time() - start_time
-        print(f"⏱️ Время обработки: {elapsed:.2f} сек")
+        print(f"⏱️ Время обработки запроса: {elapsed:.2f} секунд")
+        print("="*50 + "\n")
         
         return jsonify({'response': assistant_response})
 
     except Exception as e:
-        print(f"❌ Ошибка: {e}")
+        print(f"❌ КРИТИЧЕСКАЯ ОШИБКА: {e}")
         traceback.print_exc()
+        elapsed = time.time() - start_time
+        print(f"⏱️ Время до ошибки: {elapsed:.2f} секунд")
+        print("="*50 + "\n")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/')
