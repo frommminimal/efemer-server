@@ -90,40 +90,77 @@ def get_notes(user_id, limit=5):
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    # ... (код получения сообщения и истории)
+    start_time = time.time()
+    data = request.json
+    username = data.get('username', 'anonymous')
+    user_message = data.get('message', '')
 
-    # Указываем бесплатную модель, которую будем использовать
-    # Для Эфемера я рекомендую начать с Qwen3.5-4B
-    MODEL_NAME = "Qwen/Qwen3.5-4B"
+    if not user_message:
+        return jsonify({'error': 'Пустое сообщение'}), 400
 
     try:
+        # Получаем пользователя
+        user = get_or_create_user(username)
+        user_id = user['id']
+        
+        # Сохраняем сообщение пользователя
+        save_message(user_id, 'user', user_message)
+
+        # Загружаем историю и заметки
+        history = get_history(user_id)
+        notes = get_notes(user_id)
+
+        # Формируем системный промпт
+        system_prompt = user['persona']
+        if notes:
+            system_prompt += "\n\nТвои заметки о собеседнике:\n- " + "\n- ".join(notes)
+
+        # СОБИРАЕМ СПИСОК СООБЩЕНИЙ ДЛЯ API
+        messages = [{"role": "system", "content": system_prompt}]
+        for msg in history:
+            messages.append({"role": msg['role'], "content": msg['content']})
+        messages.append({"role": "user", "content": user_message})
+
+        # Получаем API-ключ из переменных окружения
+        api_key = os.environ.get('SILICONFLOW_API_KEY')
+        if not api_key:
+            return jsonify({'error': 'SILICONFLOW_API_KEY not configured'}), 500
+
+        # Выбираем бесплатную модель
+        MODEL_NAME = "Qwen/Qwen3.5-4B"
+
+        # Запрос к SiliconFlow
         response = requests.post(
-            "https://api.siliconflow.cn/v1/chat/completions", # адрес для текстовых моделей
+            "https://api.siliconflow.cn/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {os.environ.get('SILICONFLOW_API_KEY')}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json"
             },
             json={
-                "model": MODEL_NAME,          # <-- вот здесь указываем модель
+                "model": MODEL_NAME,
                 "messages": messages,
                 "max_tokens": 500,
                 "temperature": 0.7
             },
             timeout=30
         )
-        # ... (обработка ответа)
 
         if response.status_code != 200:
             return jsonify({'error': 'SiliconFlow API error', 'details': response.text}), 500
 
         data = response.json()
         assistant_response = data['choices'][0]['message']['content']
+        
+        # Сохраняем ответ
         save_message(user_id, 'assistant', assistant_response)
 
+        elapsed = time.time() - start_time
+        print(f"⏱️ Время обработки: {elapsed:.2f} сек")
+        
         return jsonify({'response': assistant_response})
 
     except Exception as e:
-        print(f"Ошибка: {e}")
+        print(f"❌ Ошибка: {e}")
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
@@ -133,4 +170,5 @@ def index():
 
 if __name__ == '__main__':
     init_db()
+    print("🚀 Запуск сервера...")
     app.run(host='0.0.0.0', port=5000)
