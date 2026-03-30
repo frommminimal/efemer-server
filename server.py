@@ -90,49 +90,28 @@ def get_notes(user_id, limit=5):
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    start_time = time.time()
-    data = request.json
-    username = data.get('username', 'anonymous')
-    user_message = data.get('message', '')
+    # ... (код получения сообщения и истории)
 
-    if not user_message:
-        return jsonify({'error': 'Пустое сообщение'}), 400
+    # Указываем бесплатную модель, которую будем использовать
+    # Для Эфемера я рекомендую начать с Qwen3.5-4B
+    MODEL_NAME = "Qwen/Qwen3.5-4B"
 
     try:
-        user = get_or_create_user(username)
-        user_id = user['id']
-        save_message(user_id, 'user', user_message)
-
-        history = get_history(user_id)
-        notes = get_notes(user_id)
-
-        system_prompt = user['persona']
-        if notes:
-            system_prompt += "\n\nТвои заметки о собеседнике:\n- " + "\n- ".join(notes)
-
-        messages = [{"role": "system", "content": system_prompt}]
-        for msg in history:
-            messages.append({"role": msg['role'], "content": msg['content']})
-        messages.append({"role": "user", "content": user_message})
-
-        api_key = os.environ.get('SILICONFLOW_API_KEY')
-        if not api_key:
-            return jsonify({'error': 'API key not configured'}), 500
-
         response = requests.post(
-            "https://api.siliconflow.cn/v1/chat/completions",
+            "https://api.siliconflow.cn/v1/chat/completions", # адрес для текстовых моделей
             headers={
-                "Authorization": f"Bearer {api_key}",
+                "Authorization": f"Bearer {os.environ.get('SILICONFLOW_API_KEY')}",
                 "Content-Type": "application/json"
             },
             json={
-                "model": "Qwen/Qwen2-7B-Instruct",
+                "model": MODEL_NAME,          # <-- вот здесь указываем модель
                 "messages": messages,
                 "max_tokens": 500,
                 "temperature": 0.7
             },
             timeout=30
         )
+        # ... (обработка ответа)
 
         if response.status_code != 200:
             return jsonify({'error': 'SiliconFlow API error', 'details': response.text}), 500
