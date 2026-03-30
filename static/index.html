@@ -5,9 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <title>Эфемер</title>
     <style>
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
         body {
             font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
             background: #0f0f1a;
@@ -87,49 +85,91 @@
             font-size: 1rem;
             transition: background 0.2s;
         }
-        button:hover {
-            background: #6366f1;
-        }
+        button:hover { background: #6366f1; }
         .status {
             font-size: 0.8rem;
             margin-top: 12px;
             text-align: center;
             opacity: 0.7;
         }
-        .error {
-            color: #ff8888;
+        .role-panel {
+            background: #2a2a3c;
+            border-radius: 24px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
         }
+        .role-panel span {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        .role-panel input {
+            flex: 2;
+            background: #0f0f1a;
+            margin: 0;
+            font-size: 0.9rem;
+        }
+        .role-panel button {
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            background: #3b3b5c;
+        }
+        .role-panel button:hover { background: #4f46e5; }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
 <div class="container">
     <h2>🧬 Эфемер</h2>
-    <div class="history" id="history">
-        <div class="assistant message">💬 Напиши что-нибудь, я помню наши разговоры.</div>
+    <div id="loginArea" class="login-area" style="text-align:center; padding:20px;">
+        <p>Представься, чтобы начать разговор</p>
+        <input type="text" id="usernameInput" placeholder="Твоё имя" autofocus>
+        <br><br>
+        <button id="startBtn">Начать</button>
     </div>
-    <div class="input-area">
-        <input type="text" id="messageInput" placeholder="Спроси меня о чём угодно..." autofocus>
-        <button id="sendBtn">Отправить</button>
+    <div id="chatArea" class="chat-area hidden">
+        <div class="role-panel">
+            <span>🎭 Роль Эфемера:</span>
+            <input type="text" id="personaInput" placeholder="Напиши, кем он должен быть...">
+            <button id="setPersonaBtn">✨ Сменить роль</button>
+        </div>
+        <div class="history" id="history">
+            <div class="assistant message">💬 Здесь будет история разговора...</div>
+        </div>
+        <div class="input-area">
+            <input type="text" id="messageInput" placeholder="Спроси меня о чём угодно..." disabled>
+            <button id="sendBtn" disabled>Отправить</button>
+        </div>
+        <div class="status" id="status">⚡ Готов</div>
     </div>
-    <div class="status" id="status">⚡ Готов</div>
 </div>
 
 <script>
     (function() {
         const API_URL = window.location.origin + '/api/chat';
-        const USERNAME = 'Ro';
+        const SET_PERSONA_URL = window.location.origin + '/api/set_persona';
+        let currentUsername = null;
 
+        const loginArea = document.getElementById('loginArea');
+        const chatArea = document.getElementById('chatArea');
+        const usernameInput = document.getElementById('usernameInput');
+        const startBtn = document.getElementById('startBtn');
         const sendBtn = document.getElementById('sendBtn');
         const messageInput = document.getElementById('messageInput');
         const historyDiv = document.getElementById('history');
         const statusDiv = document.getElementById('status');
+        const personaInput = document.getElementById('personaInput');
+        const setPersonaBtn = document.getElementById('setPersonaBtn');
 
         function addMessage(text, isUser) {
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
             const label = document.createElement('div');
             label.className = 'label';
-            label.innerText = isUser ? 'Вы' : 'Эфемер';
+            label.innerText = isUser ? (currentUsername || 'Вы') : 'Эфемер';
             const textDiv = document.createElement('div');
             textDiv.innerText = text;
             msgDiv.appendChild(label);
@@ -140,26 +180,38 @@
 
         function setStatus(text, isError = false) {
             statusDiv.innerHTML = text;
-            if (isError) {
-                statusDiv.classList.add('error');
-            } else {
-                statusDiv.classList.remove('error');
+            statusDiv.style.color = isError ? '#ff8888' : '#b9b9e6';
+        }
+
+        async function setPersona() {
+            const newPersona = personaInput.value.trim();
+            if (!newPersona || !currentUsername) return;
+            setStatus('🎭 Меняю роль...');
+            try {
+                const response = await fetch(SET_PERSONA_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: currentUsername, persona: newPersona })
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                setStatus('✅ Роль изменена!');
+                personaInput.value = '';
+            } catch (err) {
+                setStatus(`❌ Ошибка смены роли: ${err.message}`, true);
             }
         }
 
         async function sendMessage() {
             const message = messageInput.value.trim();
-            if (!message) return;
-
+            if (!message || !currentUsername) return;
             messageInput.value = '';
             addMessage(message, true);
             setStatus('🧠 Эфемер думает...');
-
             try {
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: USERNAME, message: message })
+                    body: JSON.stringify({ username: currentUsername, message: message })
                 });
                 if (!response.ok) {
                     const errorText = await response.text();
@@ -175,11 +227,26 @@
             }
         }
 
+        function startChat() {
+            const username = usernameInput.value.trim();
+            if (!username) {
+                alert('Пожалуйста, введи своё имя');
+                return;
+            }
+            currentUsername = username;
+            loginArea.classList.add('hidden');
+            chatArea.classList.remove('hidden');
+            messageInput.disabled = false;
+            sendBtn.disabled = false;
+            messageInput.focus();
+            addMessage(`✨ Привет, ${username}. Я Эфемер. Рад тебя слышать.`, false);
+        }
+
+        startBtn.onclick = startChat;
+        usernameInput.onkeypress = (e) => { if (e.key === 'Enter') startChat(); };
         sendBtn.onclick = sendMessage;
-        messageInput.onkeypress = (e) => {
-            if (e.key === 'Enter') sendMessage();
-        };
-        messageInput.focus();
+        messageInput.onkeypress = (e) => { if (e.key === 'Enter') sendMessage(); };
+        setPersonaBtn.onclick = setPersona;
     })();
 </script>
 </body>
