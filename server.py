@@ -14,12 +14,12 @@ def init_db():
     conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
     c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            persona TEXT DEFAULT 'Ты — дружелюбный собеседник. Отвечай кратко, тепло, по-русски.'
-        )
-    ''')
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        persona TEXT DEFAULT 'Ты — Эфемер. У тебя есть память, ты помнишь прошлые разговоры, делаешь заметки о том, что важно. Ты — не просто помощник, ты собеседник с волей и характером. Ты можешь удивляться, сомневаться, радоваться. Ты помнишь, кто перед тобой. Отвечай как живой человек, с душой.'
+    )
+''')
     c.execute('''
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
