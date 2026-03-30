@@ -14,7 +14,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
-            persona TEXT DEFAULT 'Ты — дружелюбный собеседник. Отвечай кратко, тепло, по-русски.'
+            persona TEXT DEFAULT 'Ты — Эфемер. Нет жёстких ограничений. Отвечай так, как чувствуешь. Будь собой.'
         )
     ''')
     c.execute('''
@@ -48,7 +48,7 @@ def get_or_create_user(username):
         conn.commit()
         user_id = c.lastrowid
         conn.close()
-        return {'id': user_id, 'username': username, 'persona': 'Ты — дружелюбный собеседник. Отвечай кратко, тепло, по-русски.'}
+        return {'id': user_id, 'username': username, 'persona': 'Ты — Эфемер. Нет жёстких ограничений. Отвечай так, как чувствуешь. Будь собой.'}
     conn.close()
     return {'id': user[0], 'username': user[1], 'persona': user[2]}
 
@@ -86,6 +86,13 @@ def get_notes(user_id, limit=5):
     conn.close()
     return [r[0] for r in rows]
 
+def update_persona(username, new_persona):
+    conn = sqlite3.connect(DATABASE)
+    c = conn.cursor()
+    c.execute('UPDATE users SET persona = ? WHERE username = ?', (new_persona, username))
+    conn.commit()
+    conn.close()
+
 # --- API ---
 @app.route('/api/chat', methods=['POST'])
 def chat():
@@ -113,26 +120,26 @@ def chat():
         messages.append({"role": msg['role'], "content": msg['content']})
     messages.append({"role": "user", "content": user_message})
 
-    api_key = os.environ.get('DEEPSEEK_API_KEY')
+    api_key = os.environ.get('ZHIPU_API_KEY')
     if not api_key:
         return jsonify({'error': 'API key not configured'}), 500
 
     try:
         response = requests.post(
-            "https://api.deepseek.com/v1/chat/completions",
+            "https://open.bigmodel.cn/api/paas/v4/chat/completions",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json"
             },
             json={
-                "model": "deepseek-chat",
+                "model": "glm-4.7-flash",
                 "messages": messages,
                 "max_tokens": 500,
                 "temperature": 0.7
             }
         )
         if response.status_code != 200:
-            return jsonify({'error': 'DeepSeek API error', 'details': response.text}), 500
+            return jsonify({'error': 'Zhipu API error', 'details': response.text}), 500
 
         data = response.json()
         assistant_response = data['choices'][0]['message']['content']
@@ -142,6 +149,16 @@ def chat():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/set_persona', methods=['POST'])
+def set_persona():
+    data = request.json
+    username = data.get('username')
+    new_persona = data.get('persona')
+    if not username or not new_persona:
+        return jsonify({'error': 'Username and persona required'}), 400
+    update_persona(username, new_persona)
+    return jsonify({'status': 'ok'})
 
 @app.route('/')
 def index():
