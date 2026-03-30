@@ -152,19 +152,19 @@ def chat():
         # 6. Запрос к Zhipu
         print("🔄 Отправка запроса к Zhipu API...")
         response = requests.post(
-            "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "glm-4.7-flash",
-                "messages": messages,
-                "max_tokens": 500,
-                "temperature": 0.7
-            },
-            timeout=30
-        )
+    "https://api.zhipuai.cn/api/paas/v4/chat/completions",  # другой эндпоинт
+    headers={
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    },
+    json={
+        "model": "glm-4.7-flash",
+        "messages": messages,
+        "max_tokens": 500,
+        "temperature": 0.7
+    },
+    timeout=60  # увеличил таймаут
+)
         
         print(f"📥 Статус ответа Zhipu: {response.status_code}")
         
